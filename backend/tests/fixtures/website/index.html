@@ -1,20 +1,14 @@
-from __future__ import annotations
-
-from fastapi.testclient import TestClient
-
-from app.database import app
-
-client = TestClient(app)
-
-
-def test_health_endpoint() -> None:
-    response = client.get("/api/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
-
-
-def test_create_project() -> None:
-    response = client.post("/api/projects", json={"name": "Demo", "url": "https://example.com"})
-    assert response.status_code == 200
-    data = response.json()
-    assert data["name"] == "Demo"
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>LaunchGuard Fixture - Valid Page</title>
+    <meta name="description" content="A valid test page with correct metadata." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+  <body>
+    <h1>Valid Test Page</h1>
+    <p>This is a properly structured page for testing LaunchGuard AI.</p>
+    <img src="/valid-image.png" alt="A valid image with alt text" />
+    <a href="/subpage">Valid internal link</a>
+  </body>
+</html>

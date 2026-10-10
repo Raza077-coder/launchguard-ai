@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from sqlalchemy import String, Text
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.database import Base
+from pydantic import BaseModel, Field
 
 
-class AppSetting(Base):
-    __tablename__ = "app_settings"
+class ProjectCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    url: str = Field(..., min_length=1, max_length=2048)
+    description: str | None = None
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    key: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+class ProjectRead(BaseModel):
+    id: int
+    name: str
+    url: str
+    description: str | None = None
+    is_demo: bool = False

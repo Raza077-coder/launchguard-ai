@@ -3,15 +3,19 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
-class ProjectCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255)
+class ScanCreate(BaseModel):
+    project_id: int | None = None
     url: str = Field(..., min_length=1, max_length=2048)
-    description: str | None = None
+    profile: str = "standard"
+    max_pages: int = Field(25, ge=1, le=200)
+    viewport: str = "desktop"
 
 
-class ProjectRead(BaseModel):
+class ScanRead(BaseModel):
     id: int
-    name: str
+    project_id: int | None = None
     url: str
-    description: str | None = None
-    is_demo: bool = False
+    status: str
+    profile: str
+    max_pages: int
+    viewport: str

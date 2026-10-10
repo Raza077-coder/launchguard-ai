@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from fastapi import APIRouter
+
+router = APIRouter(tags=["health"])
 
 
-class FindingUpdate(BaseModel):
-    status: str | None = Field(default=None, pattern="^(open|reviewed|accepted|false_positive|fixed)$")
-    severity: str | None = Field(default=None)
+@router.get("/health")
+def health() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "app": "LaunchGuard AI",
+        "mode": "deterministic-local",
+        "version": "0.1.0",
+    }
