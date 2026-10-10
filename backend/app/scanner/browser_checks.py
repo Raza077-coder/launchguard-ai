@@ -1,60 +1,90 @@
 from __future__ import annotations
 
-import ipaddress
-from urllib.parse import urlparse
+from dataclasses import dataclass, field
+from typing import Any
+import asyncio
+from pathlib import Path
 
+from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 import httpx
 
-PROHIBITED_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", "metadata.google.internal", "169.254.169.254"}
-ALLOWED_SCHEMES = {"http", "https"}
+
+@dataclass
+class BrowserCheckResult:
+    page_url: str
+    title: str | None = None
+    meta_description: str | None = None
+    console_errors: list[str] = field(default_factory=list)
+    network_failures: list[dict[str, Any]] = field(default_factory=list)
+    missing_alt_images: list[str] = field(default_factory=list)
+    broken_images: list[str] = field(default_factory=list)
+    missing_form_labels: list[str] = field(default_factory=list)
+    screenshot_path: str | None = None
+    status: str = "ok"
+    http_status: int = 200
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
-def is_private_ip(ip: str) -> bool:
+async def collect_page_errors(page_url: str, page: Page) -> BrowserCheckResult:
+    """Collect browser and page errors from a real Playwright page object."""
+    result = BrowserCheckResult(page_url=page_url)
+    
+    # Collect console errors
+    console_errors: list[str] = []
+    
+    def on_console_msg(msg: Any) -> None:
+        if msg.type in ("error", "warning"):
+            console_errors.append(f"{msg.type}: {msg.text}")
+    
+    page.on("console", on_console_msg)
+    
+    # Navigate and collect errors
     try:
-        addr = ipaddress.ip_address(ip)
-        return (
-            addr.is_private
-            or addr.is_loopback
-            or addr.is_link_local
-            or addr.is_reserved
-            or addr.is_multicast
-            or addr.is_unspecified
-        )
-    except ValueError:
-        return True
-
-
-def validate_target_url(url: str) -> dict[str, object]:
-    parsed = urlparse(url)
-    if parsed.scheme.lower() not in ALLOWED_SCHEMES:
-        raise ValueError("Only HTTP and HTTPS URLs are allowed.")
-    if not parsed.netloc:
-        raise ValueError("URL must include a hostname.")
-
-    host = parsed.hostname or ""
-    if host.lower() in PROHIBITED_HOSTS:
-        raise ValueError("Local or prohibited destinations are not allowed.")
-
+        response = await page.goto(page_url, wait_until="networkidle")
+        if response:
+            result.http_status = response.status
+            if response.status >= 400:
+                result.status = "failed"
+    except Exception as e:
+        result.status = "failed"
+        result.console_errors.append(f"Navigation error: {str(e)}")
+        return result
+    
+    result.console_errors = console_errors
+    
+    # Extract title and meta description
     try:
-        resolved = httpx.get(url, timeout=8.0)
-    except httpx.HTTPError as exc:
-        raise ValueError(f"Target validation failed: {exc}") from exc
-
-    if resolved.status_code >= 400:
-        raise ValueError("Target URL responded with an HTTP error during validation.")
-
-    return {"url": url, "host": host, "status_code": resolved.status_code}
-
-
-def validate_redirect_url(url: str, final_url: str | None = None) -> bool:
-    parsed = urlparse(url)
-    if parsed.scheme.lower() not in ALLOWED_SCHEMES:
-        return False
-    host = parsed.hostname or ""
-    if host.lower() in PROHIBITED_HOSTS:
-        return False
-    if final_url:
-        final_parsed = urlparse(final_url)
-        if final_parsed.hostname and final_parsed.hostname.lower() in PROHIBITED_HOSTS:
-            return False
-    return True
+        result.title = await page.title()
+    except Exception:
+        pass
+    
+    try:
+        meta_desc = await page.locator('meta[name="description"]').get_attribute("content")
+        result.meta_description = meta_desc
+    except Exception:
+        pass
+    
+    # Check images for missing alt text and broken images
+    try:
+        images = await page.locator("img").all()
+        for img in images:
+            alt = await img.get_attribute("alt")
+            src = await img.get_attribute("src")
+            if not alt and src:
+                result.missing_alt_images.append(src)
+    except Exception:
+        pass
+    
+    # Check form inputs for labels
+    try:
+        inputs = await page.locator("input[type='text'], input[type='email'], input[type='password']").all()
+        for inp in inputs:
+            input_id = await inp.get_attribute("id")
+            if input_id:
+                label = await page.locator(f'label[for="{input_id}"]').is_visible()
+                if not label:
+                    result.missing_form_labels.append(input_id)
+    except Exception:
+        pass
+    
+    return result

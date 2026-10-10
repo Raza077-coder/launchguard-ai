@@ -1,17 +1,25 @@
 from __future__ import annotations
 
-from collections import defaultdict
 
-
-def normalize_findings(findings: list[dict[str, object]]) -> list[dict[str, object]]:
-    grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
+def calculate_health_score(findings: list[dict[str, object]]) -> int:
+    """Calculate LaunchGuard Health Score based on findings.
+    
+    Start at 100 and subtract weighted penalties:
+    - Critical: 35 points
+    - High: 20 points
+    - Medium: 10 points
+    - Low: 5 points
+    
+    Minimum: 0, Maximum: 100
+    """
+    score = 100
+    weights = {
+        "critical": 35,
+        "high": 20,
+        "medium": 10,
+        "low": 5,
+    }
     for finding in findings:
-        key = f"{finding.get('category')}:{(finding.get('title') or '').lower()}"
-        grouped[key].append(finding)
-
-    normalized: list[dict[str, object]] = []
-    for group in grouped.values():
-        primary = group[0].copy()
-        primary["duplicate_count"] = len(group)
-        normalized.append(primary)
-    return normalized
+        severity = str(finding.get("severity", "low")).lower()
+        score -= weights.get(severity, 5)
+    return max(0, score)

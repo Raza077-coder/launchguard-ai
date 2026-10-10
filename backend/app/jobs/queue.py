@@ -1,42 +1,38 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-
-from app.database import SessionLocal
-from app.models.finding import Finding
-from app.schemas.finding import FindingUpdate
-
-router = APIRouter(tags=["findings"])
+from threading import Lock
+from typing import Any
 
 
-@router.get("/findings/{finding_id}")
-def get_finding(finding_id: int) -> dict[str, object]:
-    with SessionLocal() as db:
-        finding = db.query(Finding).filter(Finding.id == finding_id).first()
-        if not finding:
-            raise HTTPException(status_code=404, detail="Finding not found")
-        return {
-            "id": finding.id,
-            "scan_id": finding.scan_id,
-            "category": finding.category,
-            "title": finding.title,
-            "severity": finding.severity,
-            "confidence": finding.confidence,
-            "affected_url": finding.affected_url,
-            "description": finding.description,
-            "status": finding.status,
-        }
+class ScanJobQueue:
+    def __init__(self) -> None:
+        self._jobs: dict[int, dict[str, Any]] = {}
+        self._lock = Lock()
 
+    def enqueue(self, scan_id: int, url: str) -> None:
+        with self._lock:
+            self._jobs[scan_id] = {
+                "status": "QUEUED",
+                "url": url,
+                "events": [{"type": "queued", "message": f"Scan {scan_id} accepted."}],
+            }
 
-@router.patch("/findings/{finding_id}")
-def update_finding(finding_id: int, payload: FindingUpdate) -> dict[str, object]:
-    with SessionLocal() as db:
-        finding = db.query(Finding).filter(Finding.id == finding_id).first()
-        if not finding:
-            raise HTTPException(status_code=404, detail="Finding not found")
-        if payload.status is not None:
-            finding.status = payload.status
-        if payload.severity is not None:
-            finding.severity = payload.severity
-        db.commit()
-        return {"status": "updated", "finding_id": finding_id }
+    def cancel(self, scan_id: int) -> None:
+        with self._lock:
+            if scan_id in self._jobs:
+                self._jobs[scan_id]["status"] = "CANCELLED"
+                self._jobs[scan_id]["events"].append({"type": "cancelled", "message": f"Scan {scan_id} cancelled."})
+
+    def get_events(self, scan_id: int) -> list[dict[str, str]]:
+        with self._lock:
+            return self._jobs.get(scan_id, {"events": []})["events"]
+    
+    def add_event(self, scan_id: int, event_type: str, message: str) -> None:
+        with self._lock:
+            if scan_id in self._jobs:
+                self._jobs[scan_id]["events"].append({"type": event_type, "message": message})
+    
+    def set_status(self, scan_id: int, status: str) -> None:
+        with self._lock:
+            if scan_id in self._jobs:
+                self._jobs[scan_id]["status"] = status

@@ -6,17 +6,30 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 
-class Finding(Base):
-    __tablename__ = "findings"
+class RepairPlan(Base):
+    __tablename__ = "repair_plans"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id"), nullable=False)
-    category: Mapped[str] = mapped_column(String(100), default="general")
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    severity: Mapped[str] = mapped_column(String(50), default="medium")
-    confidence: Mapped[str] = mapped_column(String(50), default="medium")
-    affected_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    description: Mapped[str] = mapped_column(Text)
-    evidence: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(50), default="open")
+    summary: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[str] = mapped_column(default="NOW")
+
+
+class RepairProposal(Base):
+    __tablename__ = "repair_proposals"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    patch: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(default="NOW")
+
+
+class VerificationRun(Base):
+    __tablename__ = "verification_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    proposal_id: Mapped[int | None] = mapped_column(ForeignKey("repair_proposals.id"), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="pending")
+    output: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[str] = mapped_column(default="NOW")

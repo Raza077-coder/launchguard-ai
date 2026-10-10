@@ -1,28 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from collections import defaultdict
 
 
-@dataclass
-class BrowserCheckResult:
-    page_url: str
-    console_errors: list[str] = field(default_factory=list)
-    network_failures: list[str] = field(default_factory=list)
-    screenshot_path: str | None = None
-    status: str = "ok"
-    metadata: dict[str, Any] = field(default_factory=dict)
+def normalize_findings(findings: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Deduplicate similar findings across pages."""
+    grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
+    for finding in findings:
+        key = f"{finding.get('category')}:{(finding.get('title') or '').lower()}"
+        grouped[key].append(finding)
 
-
-def collect_page_errors(page_url: str, html: str | None = None) -> BrowserCheckResult:
-    console_errors: list[str] = []
-    if "error" in (html or "").lower():
-        console_errors.append("Potential runtime issue detected in page source.")
-    return BrowserCheckResult(
-        page_url=page_url,
-        console_errors=console_errors,
-        network_failures=[],
-        screenshot_path=None,
-        status="ok",
-        metadata={"checked": True},
-    )
+    normalized: list[dict[str, object]] = []
+    for group in grouped.values():
+        primary = group[0].copy()
+        primary["duplicate_count"] = len(group)
+        primary["affected_urls"] = [f.get("affected_url") for f in group]
+        normalized.append(primary)
+    return normalized
